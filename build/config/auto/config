@@ -4,8 +4,6 @@ set -eu
 lb config \
   --mode debian \
   --distribution forky \
-  --distribution-chroot forky \
-  --distribution-binary forky \
   --architectures amd64 \
   --archive-areas "main contrib non-free non-free-firmware" \
   --mirror-bootstrap "https://deb.debian.org/debian/" \
