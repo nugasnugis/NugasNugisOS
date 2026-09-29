@@ -1,0 +1,9 @@
+NAME="NugasNugisOS"
+ID=nnos
+ID_LIKE=debian
+PRETTY_NAME="NugasNugisOS"
+VERSION="0.1.0"
+VERSION_ID="0.1"
+HOME_URL="https://github.com/nugasnugis/NugasNugisOS"
+SUPPORT_URL="https://github.com/nugasnugis/NugasNugisOS/issues"
+BUG_REPORT_URL="https://github.com/nugasnugis/NugasNugisOS/issues"
