@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+lb config \
+  --distribution forky \
+  --architectures amd64 \
+  --archive-areas "main contrib non-free non-free-firmware" \
+  --debian-installer none \
+  --binary-images iso-hybrid \
+  --bootappend-live "boot=live components username=nnos" \
+  --apt-recommends true \
+  --apt-indices false \
+  --memtest none \
+  --checksums sha256 \
+  --iso-application "NugasNugisOS" \
+  --iso-publisher "NugasNugisOS Project" \
+  --iso-volume "NNOS_0.1.0"
