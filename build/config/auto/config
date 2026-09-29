@@ -2,6 +2,7 @@
 set -eu
 
 lb config \
+  --mode debian \
   --distribution forky \
   --distribution-chroot forky \
   --distribution-binary forky \
