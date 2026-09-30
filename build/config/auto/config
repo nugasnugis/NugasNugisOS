@@ -14,7 +14,6 @@ lb config \
   --mirror-binary "https://deb.debian.org/debian/" \
   --parent-mirror-bootstrap "https://deb.debian.org/debian/" \
   --parent-mirror-chroot "https://deb.debian.org/debian/" \
-  --debian-installer none \
   --binary-images iso-hybrid \
   --bootappend-live "boot=live components username=nnos" \
   --apt-recommends true \
