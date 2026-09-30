@@ -100,10 +100,10 @@ jobs:
             netcat-openbsd \
             curl
 
-          echo "Installed noVNC:"
-          command -v novnc_proxy || true
+          echo "Installed noVNC files:"
+          ls -l /usr/share/novnc/utils/novnc_proxy
+          test -x /usr/share/novnc/utils/novnc_proxy
           command -v websockify || true
-          ls -la /usr/share/novnc/ || true
 
       - name: Start NNOS VM
         run: |
@@ -155,7 +155,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          nohup novnc_proxy \
+          NOVNC_PROXY=/usr/share/novnc/utils/novnc_proxy
+
+          test -x "$NOVNC_PROXY"
+
+          nohup "$NOVNC_PROXY" \
             --listen 6080 \
             --vnc localhost:5900 \
             > /tmp/novnc.log 2>&1 &
