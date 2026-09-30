@@ -38,7 +38,13 @@ jobs:
           if [ -n "${INPUT_RUN_ID:-}" ]; then
             RUN_ID="$INPUT_RUN_ID"
           else
-            RUN_ID="$(gh run list               --workflow build.yml               --repo "${GITHUB_REPOSITORY}"               --status success               --limit 1               --json databaseId               --jq '.[0].databaseId')"
+            RUN_ID="$(gh run list \
+              --workflow build.yml \
+              --repo "${GITHUB_REPOSITORY}" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')"
           fi
 
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
@@ -59,7 +65,10 @@ jobs:
           rm -rf iso
           mkdir -p iso
 
-          gh run download "$BUILD_RUN_ID"             --repo "${GITHUB_REPOSITORY}"             --name NNOS-0.1.0-x86_64             --dir iso
+          gh run download "$BUILD_RUN_ID" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name NNOS-0.1.0-x86_64 \
+            --dir iso
 
           ISO="iso/NNOS-0.1.0-x86_64.iso"
           test -s "$ISO"
@@ -81,8 +90,20 @@ jobs:
       - name: Install QEMU and noVNC
         run: |
           set -euo pipefail
+
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             qemu-system-x86             qemu-utils             novnc             websockify             netcat-openbsd             curl
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 \
+            qemu-utils \
+            novnc \
+            websockify \
+            netcat-openbsd \
+            curl
+
+          echo "Installed noVNC:"
+          command -v novnc_proxy || true
+          command -v websockify || true
+          ls -la /usr/share/novnc/ || true
 
       - name: Start NNOS VM
         run: |
@@ -98,7 +119,20 @@ jobs:
             echo "KVM unavailable; using QEMU TCG."
           fi
 
-          nohup qemu-system-x86_64             "${ACCEL[@]}"             -machine q35             -cpu max             -m 4096             -smp 2             -cdrom "$ISO"             -boot order=d             -display none             -vnc 0.0.0.0:0             -nic user,model=virtio             -snapshot             -no-reboot             > /tmp/qemu.log 2>&1 &
+          nohup qemu-system-x86_64 \
+            "${ACCEL[@]}" \
+            -machine q35 \
+            -cpu max \
+            -m 4096 \
+            -smp 2 \
+            -cdrom "$ISO" \
+            -boot order=d \
+            -display none \
+            -vnc 0.0.0.0:0 \
+            -nic user,model=virtio \
+            -snapshot \
+            -no-reboot \
+            > /tmp/qemu.log 2>&1 &
 
           echo $! > /tmp/qemu.pid
 
@@ -121,7 +155,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          nohup novnc             --listen 6080             --vnc localhost:5900             > /tmp/novnc.log 2>&1 &
+          nohup novnc_proxy \
+            --listen 6080 \
+            --vnc localhost:5900 \
+            > /tmp/novnc.log 2>&1 &
 
           echo $! > /tmp/novnc.pid
 
@@ -146,7 +183,15 @@ jobs:
           echo "Starting temporary Pinggy HTTP tunnel..."
           echo "The public noVNC URL will be printed below."
 
-          nohup ssh             -o StrictHostKeyChecking=no             -o UserKnownHostsFile=/dev/null             -o ServerAliveInterval=30             -o ServerAliveCountMax=3             -p 443             -R0:localhost:6080             free.pinggy.io             > /tmp/pinggy.log 2>&1 &
+          nohup ssh \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            -p 443 \
+            -R0:localhost:6080 \
+            free.pinggy.io \
+            > /tmp/pinggy.log 2>&1 &
 
           echo $! > /tmp/pinggy.pid
 
