@@ -3,6 +3,7 @@ set -eu
 
 lb config \
   --mode debian \
+  --initsystem systemd \
   --distribution forky \
   --architectures amd64 \
   --archive-areas "main contrib non-free non-free-firmware" \
