@@ -25,5 +25,4 @@ firmware-linux-nonfree
 mesa-vulkan-drivers
 vulkan-tools
 gamemode
-steam-installer
 calamares
