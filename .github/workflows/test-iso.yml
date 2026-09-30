@@ -68,17 +68,21 @@ jobs:
           ls -lh "$ISO"
 
           if [ -f iso/NNOS-0.1.0-x86_64.iso.sha256 ]; then
-            (
-              cd iso
-              sha256sum -c NNOS-0.1.0-x86_64.iso.sha256
-            )
+            EXPECTED="$(awk '{print $1; exit}' iso/NNOS-0.1.0-x86_64.iso.sha256)"
+            ACTUAL="$(sha256sum "$ISO" | awk '{print $1}')"
+
+            echo "Expected SHA-256: $EXPECTED"
+            echo "Actual SHA-256:   $ACTUAL"
+
+            test "$EXPECTED" = "$ACTUAL"
+            echo "SHA-256: OK"
           fi
 
       - name: Install QEMU and noVNC
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             qemu-system-x86             qemu-utils             novnc             websockify             net-tools             curl
+          sudo apt-get install -y --no-install-recommends             qemu-system-x86             qemu-utils             novnc             websockify             netcat-openbsd             curl
 
       - name: Start NNOS VM
         run: |
