@@ -1,0 +1,197 @@
+name: Test NNOS ISO
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Optional build.yml run ID. Leave empty to use the latest successful build."
+        required: false
+        type: string
+      duration_minutes:
+        description: "How long to keep the VM/tunnel alive"
+        required: false
+        default: "25"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  test-iso:
+    name: Boot NNOS in QEMU + noVNC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Find successful NNOS ISO build
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${INPUT_RUN_ID:-}" ]; then
+            RUN_ID="$INPUT_RUN_ID"
+          else
+            RUN_ID="$(gh run list               --workflow build.yml               --repo "${GITHUB_REPOSITORY}"               --status success               --limit 1               --json databaseId               --jq '.[0].databaseId')"
+          fi
+
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "ERROR: No successful build.yml run was found."
+            exit 1
+          fi
+
+          echo "Using build run: $RUN_ID"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download NNOS ISO artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ steps.build.outputs.run_id }}
+        run: |
+          set -euo pipefail
+
+          rm -rf iso
+          mkdir -p iso
+
+          gh run download "$BUILD_RUN_ID"             --repo "${GITHUB_REPOSITORY}"             --name NNOS-0.1.0-x86_64             --dir iso
+
+          ISO="iso/NNOS-0.1.0-x86_64.iso"
+          test -s "$ISO"
+
+          echo "ISO:"
+          ls -lh "$ISO"
+
+          if [ -f iso/NNOS-0.1.0-x86_64.iso.sha256 ]; then
+            (
+              cd iso
+              sha256sum -c NNOS-0.1.0-x86_64.iso.sha256
+            )
+          fi
+
+      - name: Install QEMU and noVNC
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             qemu-system-x86             qemu-utils             novnc             websockify             net-tools             curl
+
+      - name: Start NNOS VM
+        run: |
+          set -euo pipefail
+
+          ISO="$GITHUB_WORKSPACE/iso/NNOS-0.1.0-x86_64.iso"
+
+          if [ -e /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            ACCEL=(-enable-kvm)
+            echo "KVM acceleration available."
+          else
+            ACCEL=(-accel tcg,thread=multi)
+            echo "KVM unavailable; using QEMU TCG."
+          fi
+
+          nohup qemu-system-x86_64             "${ACCEL[@]}"             -machine q35             -cpu max             -m 4096             -smp 2             -cdrom "$ISO"             -boot order=d             -display none             -vnc 0.0.0.0:0             -nic user,model=virtio             -snapshot             -no-reboot             > /tmp/qemu.log 2>&1 &
+
+          echo $! > /tmp/qemu.pid
+
+          echo "Waiting for QEMU VNC..."
+          for i in {1..30}; do
+            if nc -z 127.0.0.1 5900; then
+              echo "QEMU VNC is ready."
+              break
+            fi
+            sleep 2
+          done
+
+          if ! nc -z 127.0.0.1 5900; then
+            echo "ERROR: QEMU VNC did not start."
+            cat /tmp/qemu.log
+            exit 1
+          fi
+
+      - name: Start noVNC
+        run: |
+          set -euo pipefail
+
+          nohup novnc             --listen 6080             --vnc localhost:5900             > /tmp/novnc.log 2>&1 &
+
+          echo $! > /tmp/novnc.pid
+
+          for i in {1..20}; do
+            if nc -z 127.0.0.1 6080; then
+              echo "noVNC is ready on port 6080."
+              break
+            fi
+            sleep 1
+          done
+
+          if ! nc -z 127.0.0.1 6080; then
+            echo "ERROR: noVNC did not start."
+            cat /tmp/novnc.log
+            exit 1
+          fi
+
+      - name: Start Pinggy tunnel
+        run: |
+          set -euo pipefail
+
+          echo "Starting temporary Pinggy HTTP tunnel..."
+          echo "The public noVNC URL will be printed below."
+
+          nohup ssh             -o StrictHostKeyChecking=no             -o UserKnownHostsFile=/dev/null             -o ServerAliveInterval=30             -o ServerAliveCountMax=3             -p 443             -R0:localhost:6080             free.pinggy.io             > /tmp/pinggy.log 2>&1 &
+
+          echo $! > /tmp/pinggy.pid
+
+          for i in {1..20}; do
+            if grep -qE 'https?://[^[:space:]]+pinggy[^[:space:]]*' /tmp/pinggy.log; then
+              break
+            fi
+            sleep 2
+          done
+
+          echo "=============================="
+          echo "      NNOS noVNC ACCESS"
+          echo "=============================="
+          cat /tmp/pinggy.log || true
+          echo "=============================="
+
+      - name: Keep VM available for testing
+        env:
+          DURATION: ${{ inputs.duration_minutes }}
+        run: |
+          set -euo pipefail
+
+          MINUTES="${DURATION:-25}"
+
+          if ! [[ "$MINUTES" =~ ^[0-9]+$ ]] || [ "$MINUTES" -lt 1 ]; then
+            echo "Invalid duration; using 25 minutes."
+            MINUTES=25
+          fi
+
+          echo "NNOS test VM will remain available for $MINUTES minutes."
+          echo "Open the Pinggy URL printed above and test NNOS."
+
+          for ((i=1; i<=MINUTES; i++)); do
+            if ! kill -0 "$(cat /tmp/qemu.pid)" 2>/dev/null; then
+              echo "QEMU stopped unexpectedly."
+              cat /tmp/qemu.log || true
+              exit 1
+            fi
+
+            echo "[$i/$MINUTES] NNOS VM running..."
+            sleep 60
+          done
+
+      - name: Dump VM logs
+        if: always()
+        run: |
+          echo "===== QEMU LOG ====="
+          cat /tmp/qemu.log 2>/dev/null || true
+          echo "===== noVNC LOG ====="
+          cat /tmp/novnc.log 2>/dev/null || true
+          echo "===== Pinggy LOG ====="
+          cat /tmp/pinggy.log 2>/dev/null || true
