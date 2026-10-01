@@ -125,6 +125,7 @@ jobs:
             -cpu max \
             -m 4096 \
             -smp 2 \
+            -vga std \
             -cdrom "$ISO" \
             -boot order=d \
             -display none \
@@ -156,7 +157,6 @@ jobs:
           set -euo pipefail
 
           NOVNC_PROXY=/usr/share/novnc/utils/novnc_proxy
-
           test -x "$NOVNC_PROXY"
 
           nohup "$NOVNC_PROXY" \
